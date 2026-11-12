@@ -11,7 +11,10 @@
     "bake:textures": "node scripts/bake-textures.mjs",
     "test:e2e": "node scripts/e2e.mjs",
     "export:collision": "node scripts/export-collision-reference.mjs",
-    "screenshot": "node scripts/screenshot.mjs"
+    "screenshot": "node scripts/screenshot.mjs",
+    "verify:env": "node tools/verify-env.mjs",
+    "verify:unreal": "node tools/unreal/mcp-smoke.mjs",
+    "verify:blender": "node tools/blender/selftest.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",

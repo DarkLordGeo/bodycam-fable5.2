@@ -2,3 +2,7 @@ node_modules
 dist
 .vercel
 *.log
+
+# local Claude Code / MCP client config (machine-specific; never commit)
+.mcp.json
+.claude/settings.local.json
