@@ -3,9 +3,17 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Level, WALL_H, DOOR_H, type LampDef } from './Level';
 import type { CollisionWorld } from './CollisionWorld';
 import { DENSITY, canvasTexture, type Mats } from '../rendering/Materials';
+import { ROOM_IDS, ROOM_RECTS, roomsTouching, type RoomId } from './Rooms';
 
 const NO_SHADOW = new Set(['lampOn', 'lampFlicker', 'lampWarm', 'lampOff', 'lampRed', 'window', 'sky', 'screen', 'ledRed', 'ledGreen', 'ledAmber', 'paper']);
-const CHUNK = 18;
+
+/**
+ * A set of procedural visuals that is shown or hidden as one unit.
+ * - a room's own visuals: rooms = [that room], rule 'all'
+ * - a wall / lintel shared by several rooms: hidden only when ALL of them use imported visuals
+ * - a door frame: hidden as soon as ANY adjoining room uses imported visuals (the GLB room supplies its own)
+ */
+export interface VisualSet { group: THREE.Group; rooms: RoomId[]; rule: 'all' | 'any' }
 
 function rng(seed: number): () => number { let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); }
 
@@ -25,8 +33,13 @@ function worldUV(g: THREE.BufferGeometry, scale: number): void {
 
 /**
  * Builds the facility: structure from the Level grid, then hand-placed procedural props.
- * All static geometry is merged per material + spatial chunk (few draw calls, still frustum-cullable);
- * repeated props (crates, barrels, rubble) use InstancedMesh.
+ *
+ * Two independent outputs:
+ *  - GAMEPLAY: Rapier colliders (`col.addBox/addCylinder`, `solid()`) and nav blocking (`level.blockWorld`).
+ *    Always created, exactly once, regardless of how any room is rendered.
+ *  - VISUALS: meshes, grouped into VisualSets (per room, plus shared walls / door frames) so that a
+ *    room's procedural look can be hidden and replaced by an imported GLB without touching gameplay.
+ * Visual geometry is merged per material within each set; repeated props use InstancedMesh.
  */
 export class EnvironmentBuilder {
   group = new THREE.Group();
@@ -34,12 +47,30 @@ export class EnvironmentBuilder {
   private batch = new Map<string, THREE.BufferGeometry[]>();
   private M = new THREE.Matrix4();
   private ry = 0;
-  private crates: THREE.Matrix4[] = [];
-  private barrels: { m: THREE.Matrix4; c: number }[] = [];
-  private rubble: THREE.Matrix4[] = [];
+  /** Visual sets keyed by owner id (a RoomId, or a shared-structure key). */
+  readonly sets = new Map<string, VisualSet>();
+  private owner = 'hall';
+  private crates: { m: THREE.Matrix4; o: string }[] = [];
+  private barrels: { m: THREE.Matrix4; c: number; o: string }[] = [];
+  private rubble: { m: THREE.Matrix4; o: string }[] = [];
   private rand = rng(7);
 
   constructor(private level: Level, private col: CollisionWorld, private mats: Mats) {}
+
+  // ---------- visual ownership ----------
+  private setFor(owner: string): VisualSet {
+    let v = this.sets.get(owner);
+    if (!v) { v = { group: new THREE.Group(), rooms: [owner as RoomId], rule: 'all' }; v.group.name = 'visual:' + owner; this.sets.set(owner, v); this.group.add(v.group); }
+    return v;
+  }
+  /** Routes following visuals to a room. Gameplay calls are unaffected by the current owner. */
+  private inRoom(room: RoomId): void { this.owner = room; this.col.tag = 'prop:' + room; this.setFor(room); }
+  /** Routes following visuals to a structure set shared by the rooms touching the given rect. */
+  private shared(rooms: RoomId[], rule: 'all' | 'any'): void {
+    const key = `${rule === 'all' ? 'walls' : 'frames'}:${rooms.join('+')}`;
+    if (!this.sets.has(key)) { const v = this.setFor(key); v.rooms = rooms; v.rule = rule; }
+    this.owner = key;
+  }
 
   // ---------- batching primitives ----------
   private part(mat: string, geo: THREE.BufferGeometry, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0): void {
@@ -48,8 +79,7 @@ export class EnvironmentBuilder {
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
     g.applyMatrix4(m);
     worldUV(g, DENSITY[mat] ?? 0.6);
-    g.computeBoundingBox(); const c = g.boundingBox!.getCenter(new THREE.Vector3());
-    const key = `${mat}|${Math.floor(c.x / CHUNK)},${Math.floor(c.z / CHUNK)}`;
+    const key = `${this.owner}|${mat}`;
     let arr = this.batch.get(key); if (!arr) this.batch.set(key, (arr = []));
     arr.push(g);
   }
@@ -70,8 +100,16 @@ export class EnvironmentBuilder {
   }
 
   build(): THREE.Group {
+    for (const id of ROOM_IDS) this.setFor(id);
     this.structure();
-    this.propsLoadingBay(); this.propsBreakRoom(); this.propsHall(); this.propsCorridor(); this.propsOffices(); this.propsGenerator(); this.propsWorkshop();
+    this.inRoom('loadingBay'); this.propsLoadingBay();
+    this.inRoom('breakRoom'); this.propsBreakRoom();
+    this.inRoom('hall'); this.propsHall();
+    this.inRoom('corridor'); this.propsCorridor();
+    this.propsOffices(); // switches between the four offices itself
+    this.inRoom('generator'); this.propsGenerator();
+    this.inRoom('workshop'); this.propsWorkshop();
+    this.col.tag = 'structure';
     this.flush();
     this.level.finalizeNav();
     return this.group;
@@ -80,30 +118,44 @@ export class EnvironmentBuilder {
   // ---------- structure ----------
   private structure(): void {
     const L = this.level;
+    // --- walls: one collider per merged wall rect; visual shared by the rooms on either side
     for (const r of L.wallRects()) {
       const w = r.x1 - r.x0, d = r.z1 - r.z0;
+      this.shared(roomsTouching(r), 'all'); this.col.tag = 'wall';
       this.box('wall', w, WALL_H, d, r.x0 + w / 2, WALL_H / 2, r.z0 + d / 2);
       this.col.addBox(r.x0 + w / 2, WALL_H / 2, r.z0 + d / 2, w / 2, WALL_H / 2, d / 2);
     }
+    // --- door openings: lintel collider above; frame is visual only
     for (const r of L.doorRects()) {
       const w = r.x1 - r.x0, d = r.z1 - r.z0, cx = r.x0 + w / 2, cz = r.z0 + d / 2, lh = WALL_H - DOOR_H;
+      const rooms = roomsTouching(r);
+      this.shared(rooms, 'all'); this.col.tag = 'lintel';
       this.box('wall', w, lh, d, cx, DOOR_H + lh / 2, cz);
       this.col.addBox(cx, DOOR_H + lh / 2, cz, w / 2, lh / 2, d / 2);
       const alongX = w > d; const len = alongX ? w : d, th = (alongX ? d : w) + 0.08;
+      this.shared(rooms, 'any');
       this.prop(cx, cz, alongX ? 0 : Math.PI / 2, () => {
         this.box('mDark', 0.09, DOOR_H, th, -len / 2 + 0.045, DOOR_H / 2, 0); this.box('mDark', 0.09, DOOR_H, th, len / 2 - 0.045, DOOR_H / 2, 0);
         this.box('mDark', len, 0.09, th, 0, DOOR_H - 0.045, 0);
         this.box('steel', len - 0.18, 0.012, th * 0.9, 0, 0.006, 0); // threshold plate
       });
     }
-    // floor slab + ceiling
-    this.box('floor', 36, 0.3, 26, 18, -0.15, 13); this.col.addBox(18, -0.15, 13, 18, 0.15, 13);
-    this.col.addBox(18, WALL_H + 0.15, 13, 18, 0.15, 13);
+    // --- floor + ceiling: ONE collider each for the whole level (unchanged); visuals split per room
+    this.col.tag = 'floor'; this.col.addBox(18, -0.15, 13, 18, 0.15, 13);
+    this.col.tag = 'ceiling'; this.col.addBox(18, WALL_H + 0.15, 13, 18, 0.15, 13);
     const slab = (mat: string, x0: number, z0: number, x1: number, z1: number) => this.box(mat, x1 - x0, 0.25, z1 - z0, (x0 + x1) / 2, WALL_H + 0.125, (z0 + z1) / 2);
-    slab('plaster', 0, 0, 36, 8.75); slab('ceiling', 0, 8.75, 36, 13); slab('ceiling', 0, 21, 36, 26);
-    let px = 0;
+    for (const id of ROOM_IDS) {
+      const q = ROOM_RECTS[id]; this.owner = id;
+      this.box('floor', q.x1 - q.x0, 0.3, q.z1 - q.z0, (q.x0 + q.x1) / 2, -0.15, (q.z0 + q.z1) / 2);
+      if (id === 'hall') continue; // hall ceiling has skylight openings, built below
+      slab(q.z1 <= 8.75 ? 'plaster' : 'ceiling', q.x0, q.z0, q.x1, q.z1);
+    }
+    this.owner = 'hall';
+    const H = ROOM_RECTS.hall;
+    slab('ceiling', H.x0, H.z0, H.x1, 13); slab('ceiling', H.x0, 21, H.x1, H.z1);
+    let px = H.x0;
     for (const s of L.skylights) { slab('ceiling', px, 13, s.x0, 21); px = s.x1; }
-    slab('ceiling', px, 13, 36, 21);
+    slab('ceiling', px, 13, H.x1, 21);
     for (const s of L.skylights) {
       const w = s.x1 - s.x0, d = s.z1 - s.z0, cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2;
       this.box('sky', w + 0.4, 0.04, d + 0.4, cx, WALL_H + 0.75, cz);
@@ -123,7 +175,7 @@ export class EnvironmentBuilder {
     hazard.wrapS = THREE.RepeatWrapping; hazard.repeat.set(2, 1);
     const hzMat = new THREE.MeshStandardMaterial({ map: hazard, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 });
     for (const [x, z] of [[15.5, 13.5], [21.5, 13.5], [15.5, 20.5], [21.5, 20.5]]) {
-      for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.5), hzMat); const a = (i * Math.PI) / 2; m.position.set(x + Math.sin(a) * 0.503, 0.85, z + Math.cos(a) * 0.503); m.rotation.y = a; this.group.add(m); }
+      for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.5), hzMat); const a = (i * Math.PI) / 2; m.position.set(x + Math.sin(a) * 0.503, 0.85, z + Math.cos(a) * 0.503); m.rotation.y = a; this.setFor(this.owner).group.add(m); }
     }
     // hall windows (south outer wall): frosted panes with steel frames
     for (const x of [13.5, 18.25, 23]) this.prop(x, 25.49, 0, () => {
@@ -136,14 +188,14 @@ export class EnvironmentBuilder {
 
   // ---------- reusable props ----------
   private crate(x: number, z: number, s: number, ry: number, y = 0): void {
-    this.crates.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry), new THREE.Vector3(s, s, s)));
+    this.crates.push({ o: this.owner, m: new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry), new THREE.Vector3(s, s, s)) });
     this.prop(x, z, ry, () => this.solid(s, s, s, 0, 0, y));
   }
   private barrel(x: number, z: number, color: number, tipped = false): void {
     const q = new THREE.Quaternion(); const p = new THREE.Vector3(x, 0, z);
     if (tipped) { q.setFromEuler(new THREE.Euler(Math.PI / 2, this.rand() * 6, 0, 'YXZ')); p.y = 0.29; }
     else q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.rand() * 6);
-    this.barrels.push({ m: new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)), c: color });
+    this.barrels.push({ o: this.owner, m: new THREE.Matrix4().compose(p, q, new THREE.Vector3(1, 1, 1)), c: color });
     if (tipped) { this.col.addBox(x, 0.29, z, 0.45, 0.29, 0.45); this.level.blockWorld(x - 0.45, z - 0.45, x + 0.45, z + 0.45); }
     else { this.col.addCylinder(x, 0.45, z, 0.45, 0.29); this.level.blockWorld(x - 0.29, z - 0.29, x + 0.29, z + 0.29); }
   }
@@ -244,19 +296,19 @@ export class EnvironmentBuilder {
       c.globalAlpha = 0.25; for (let i = 0; i < 260; i++) { c.fillStyle = Math.random() > 0.5 ? '#5a4a36' : '#2a2a2a'; c.fillRect(Math.random() * 512, Math.random() * 128, 2 + Math.random() * 5, 1 + Math.random() * 3); }
     });
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 4), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, metalness: 0.2 }));
-    m.position.set(x, y, z); m.rotation.y = ry; this.group.add(m);
+    m.position.set(x, y, z); m.rotation.y = ry; this.setFor(this.owner).group.add(m);
   }
   private floorLine(x0: number, z0: number, x1: number, z1: number): void {
     const tex = canvasTexture(256, 32, (c) => { c.fillStyle = '#c9a21a'; c.fillRect(0, 0, 256, 32); for (let i = 0; i < 500; i++) { c.clearRect(Math.random() * 256, Math.random() * 32, 2 + Math.random() * 9, 1 + Math.random() * 4); } });
     const len = Math.hypot(x1 - x0, z1 - z0);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.1), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3, depthWrite: false }));
     m.rotation.order = 'YXZ'; m.rotation.set(-Math.PI / 2, Math.atan2(-(z1 - z0), x1 - x0), 0);
-    m.position.set((x0 + x1) / 2, 0.004, (z0 + z1) / 2); m.receiveShadow = true; this.group.add(m);
+    m.position.set((x0 + x1) / 2, 0.004, (z0 + z1) / 2); m.receiveShadow = true; this.setFor(this.owner).group.add(m);
   }
   private debris(x: number, z: number, n: number, spread: number): void {
     for (let i = 0; i < n; i++) {
       const s = 0.03 + this.rand() * 0.09;
-      this.rubble.push(new THREE.Matrix4().compose(new THREE.Vector3(x + (this.rand() - 0.5) * spread, s * 0.4, z + (this.rand() - 0.5) * spread), new THREE.Quaternion().setFromEuler(new THREE.Euler(this.rand() * 6, this.rand() * 6, this.rand() * 6)), new THREE.Vector3(s * (0.6 + this.rand()), s * 0.6, s * (0.6 + this.rand()))));
+      this.rubble.push({ o: this.owner, m: new THREE.Matrix4().compose(new THREE.Vector3(x + (this.rand() - 0.5) * spread, s * 0.4, z + (this.rand() - 0.5) * spread), new THREE.Quaternion().setFromEuler(new THREE.Euler(this.rand() * 6, this.rand() * 6, this.rand() * 6)), new THREE.Vector3(s * (0.6 + this.rand()), s * 0.6, s * (0.6 + this.rand()))) });
     }
     for (let i = 0; i < n / 4; i++) this.box('paper', 0.21, 0.003, 0.3, x + (this.rand() - 0.5) * spread, 0.004 + i * 0.001, z + (this.rand() - 0.5) * spread, 0, this.rand() * 6);
   }
@@ -354,17 +406,20 @@ export class EnvironmentBuilder {
   }
   private propsOffices(): void {
     // A: admin
+    this.inRoom('officeA');
     this.tubeLight(4.2, 2.8, 0, { shadow: true, intensity: 26 });
     this.desk(2.2, 1.3, 0); this.chair(2.1, 2.2, 0.4); this.desk(6.4, 3.3, -Math.PI / 2); this.chair(5.6, 3.4, -1.9);
     this.prop(7.72, 1.2, -Math.PI / 2, () => { for (const sx of [-0.5, 0, 0.5]) { this.box('mGrey', 0.46, 1.32, 0.6, sx, 0.66, 0); for (let i = 0; i < 4; i++) { this.box('dark', 0.42, 0.008, 0.01, sx, 0.1 + i * 0.32, 0.301); this.box('chrome', 0.12, 0.02, 0.02, sx, 0.26 + i * 0.32, 0.31); } } this.solid(1.5, 1.35, 0.6); });
     this.prop(0.52, 3.2, Math.PI / 2, () => { this.box('wood', 1.5, 1.0, 0.03, 0, 1.7, 0.015); for (let i = 0; i < 9; i++) this.box('paper', 0.2, 0.28, 0.004, -0.55 + (i % 5) * 0.28, 1.9 - Math.floor(i / 5) * 0.4, 0.034, 0, 0, (this.rand() - 0.5) * 0.15); });
     this.debris(4, 3.6, 14, 3);
     // B: lockers
+    this.inRoom('officeB');
     this.tubeLight(12.2, 2.8, 0, { intensity: 22, shadow: true });
     this.lockers(11.2, 0.76, 0, 11); this.lockers(15.74, 3.0, -Math.PI / 2, 6);
     this.prop(11.6, 2.9, 0, () => { this.box('wood', 2.4, 0.05, 0.36, 0, 0.45, 0); for (const sx of [-1, 1]) this.box('mDark', 0.05, 0.43, 0.3, sx, 0.215, 0); this.box('card', 0.3, 0.2, 0.25, 0.6, 0.57, 0, 0, 0.3); this.solid(2.4, 0.5, 0.36); });
     this.debris(13, 3.8, 8, 2);
     // C: control room
+    this.inRoom('officeC');
     this.tubeLight(21.2, 2.9, 0, { intensity: 20, color: 0xdfeaff, shadow: true });
     this.prop(21.2, 0.95, 0, () => { // control console wall
       this.box('mGrey', 6.4, 0.9, 0.8, 0, 0.45, 0); this.box('mDark', 6.4, 0.06, 0.86, 0, 0.93, 0.02); this.box('mGrey', 6.4, 1.1, 0.35, 0, 1.5, -0.22, -0.18);
@@ -381,6 +436,7 @@ export class EnvironmentBuilder {
     this.sign('SYSTEM OFFLINE', 21.2, 2.85, 0.51, 0, 1.6, '#16140f', '#c9321a');
     this.debris(21, 4, 8, 3);
     // D: stores (dark)
+    this.inRoom('officeD');
     this.tubeLight(31, 2.8, 0, { off: true });
     this.rack(31, 1.0, 0, 4); this.rack(27.0, 3.0, Math.PI / 2, 3); this.rack(35.0, 3.0, Math.PI / 2, 3);
     this.crate(33.2, 4.2, 0.9, 0.2); this.crate(28.6, 4.3, 0.7, -0.4); this.barrel(33.9, 3.2, 0x8d9296);
@@ -440,10 +496,10 @@ export class EnvironmentBuilder {
   // ---------- flush batches / instances ----------
   private flush(): void {
     for (const [key, geos] of this.batch) {
-      const mat = key.split('|')[0]; const g = mergeGeometries(geos, false)!; geos.forEach((x) => x.dispose());
+      const [owner, mat] = key.split('|'); const g = mergeGeometries(geos, false)!; geos.forEach((x) => x.dispose());
       const mesh = new THREE.Mesh(g, this.mats[mat]); mesh.name = key;
       mesh.castShadow = !NO_SHADOW.has(mat); mesh.receiveShadow = !NO_SHADOW.has(mat) || mat === 'paper';
-      this.group.add(mesh);
+      this.setFor(owner).group.add(mesh);
     }
     this.batch.clear();
     // crates
@@ -456,13 +512,21 @@ export class EnvironmentBuilder {
     }
     for (const s of [-1, 1]) { cg.push(new THREE.BoxGeometry(1.25, t, 0.03).rotateZ(s * 0.76).translate(0, 0.5, s * 0.485)); cg.push(new THREE.BoxGeometry(0.03, t, 1.25).rotateX(s * 0.76).translate(s * 0.485, 0.5, 0)); }
     const crateGeo = mergeGeometries(cg.map((g) => g.toNonIndexed()), false)!;
-    const cm = new THREE.InstancedMesh(crateGeo, this.mats.wood, this.crates.length); this.crates.forEach((m, i) => cm.setMatrixAt(i, m));
     // barrels
     const prof: [number, number][] = [[0, 0], [0.29, 0], [0.29, 0.02], [0.28, 0.03], [0.28, 0.28], [0.296, 0.3], [0.28, 0.32], [0.28, 0.58], [0.296, 0.6], [0.28, 0.62], [0.28, 0.86], [0.29, 0.87], [0.29, 0.9], [0.272, 0.9], [0.272, 0.875], [0, 0.875]];
-    const bg = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 22);
-    const bm = new THREE.InstancedMesh(bg, this.mats.inst, this.barrels.length); const col = new THREE.Color();
-    this.barrels.forEach((b, i) => { bm.setMatrixAt(i, b.m); bm.setColorAt(i, col.set(b.c)); });
-    const rm = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), this.mats.wall, this.rubble.length); this.rubble.forEach((m, i) => rm.setMatrixAt(i, m));
-    for (const im of [cm, bm, rm]) { im.castShadow = im !== rm; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); this.group.add(im); }
+    const barrelGeo = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 22);
+    const rubbleGeo = new THREE.DodecahedronGeometry(1, 0);
+    // one InstancedMesh per prop type per owning room, so a room's instances hide with the room
+    const col = new THREE.Color();
+    const instanced = <T extends { m: THREE.Matrix4; o: string }>(items: T[], geo: THREE.BufferGeometry, mat: THREE.Material, shadow: boolean, each?: (im: THREE.InstancedMesh, i: number, it: T) => void) => {
+      for (const owner of new Set(items.map((i) => i.o))) {
+        const mine = items.filter((i) => i.o === owner); const im = new THREE.InstancedMesh(geo, mat, mine.length);
+        mine.forEach((it, i) => { im.setMatrixAt(i, it.m); each?.(im, i, it); });
+        im.castShadow = shadow; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); this.setFor(owner).group.add(im);
+      }
+    };
+    instanced(this.crates, crateGeo, this.mats.wood, true);
+    instanced(this.barrels, barrelGeo, this.mats.inst, true, (im, i, b) => im.setColorAt(i, col.set(b.c)));
+    instanced(this.rubble, rubbleGeo, this.mats.wall, false);
   }
 }

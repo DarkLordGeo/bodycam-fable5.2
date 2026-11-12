@@ -11,8 +11,11 @@ Conventions and decisions to keep future work consistent.
   loose meshes.
 - **Props** are placed in `EnvironmentBuilder` with `prop(x, z, ry, () => …)`. Call `solid(w, h, d)`
   inside to register a collider *and* block the nav grid in one step.
-- **Static geometry is batched** per material and 18 m chunk; repeated props use `InstancedMesh`.
-  Do not add individual static meshes to the scene.
+- **Static geometry is batched** per material within each room's visual set; repeated props use
+  `InstancedMesh`. Do not add individual static meshes to the scene.
+- **Gameplay and visuals are separate.** Colliders and nav blocking are created once and never depend on
+  how a room is rendered. Rooms can switch between `procedural` and `glb` visuals; see
+  `docs/ENVIRONMENT_PIPELINE.md`.
 - **Tunables live in `src/config.ts`.** Every camera effect has its own value and can be zeroed.
   After changing `CFG.effects` at runtime call `game.post.applyConfig()`.
 - **No runtime third-party URLs.** Everything is served from `public/assets`. Audio is synthesised.

@@ -6,11 +6,18 @@ export const GROUP_PLAYER = 0x0002;
 export const GROUP_ENEMY = 0x0004;
 export const groups = (member: number, filter: number): number => ((member << 16) | filter) >>> 0;
 
+/** Record of one static level collider, kept for the collision-reference export and the debug overlay. */
+export interface StaticCollider { shape: 'box' | 'cylinder'; cx: number; cy: number; cz: number; hx: number; hy: number; hz: number; rotY: number; tag: string }
+
 export interface RayHit { dist: number; point: THREE.Vector3; normal: THREE.Vector3 }
 
 /** Thin wrapper around the Rapier world: static level colliders + ray queries. */
 export class CollisionWorld {
   world!: RAPIER.World;
+  /** Every static collider created through addBox / addCylinder, in creation order. */
+  readonly statics: StaticCollider[] = [];
+  /** Label applied to colliders created from now on (bookkeeping only; no effect on physics). */
+  tag = 'structure';
   private ray!: RAPIER.Ray;
 
   static async create(): Promise<CollisionWorld> {
@@ -25,10 +32,12 @@ export class CollisionWorld {
     const d = RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, cy, cz).setCollisionGroups(groups(GROUP_STATIC, 0xffff));
     if (rotY) d.setRotation({ x: 0, y: Math.sin(rotY / 2), z: 0, w: Math.cos(rotY / 2) });
     this.world.createCollider(d);
+    this.statics.push({ shape: 'box', cx, cy, cz, hx, hy, hz, rotY, tag: this.tag });
   }
 
   addCylinder(cx: number, cy: number, cz: number, halfH: number, r: number): void {
     this.world.createCollider(RAPIER.ColliderDesc.cylinder(halfH, r).setTranslation(cx, cy, cz).setCollisionGroups(groups(GROUP_STATIC, 0xffff)));
+    this.statics.push({ shape: 'cylinder', cx, cy, cz, hx: r, hy: halfH, hz: r, rotY: 0, tag: this.tag });
   }
 
   /** Ray against static level geometry only. */

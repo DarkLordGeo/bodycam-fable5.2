@@ -5,7 +5,7 @@
 `npm run test:e2e` (script: `scripts/e2e.mjs`) drives the production build in headless Chrome with
 real keyboard and mouse events and steps the simulation deterministically.
 
-Last run: **40 / 40 checks passed** against `vite preview` of the production build.
+Last run: **53 / 53 checks passed** (the original 40 plus 13 environment-pipeline checks) against `vite preview` of the production build.
 
 | Area | Checks |
 | --- | --- |
@@ -16,6 +16,7 @@ Last run: **40 / 40 checks passed** against `vite preview` of the production bui
 | Weapons | rifle auto fire, impact decals, recoil, aim down sights, reload from reserve, switch to pistol, semi-auto fire, switch back |
 | Enemies | enemy model in the scene; patrol; never inside walls or props; line-of-sight detection; detect → engage; player takes damage |
 | Mission | hostile killed with weapon fire; all AI states exercised; win state and overlay; restart resets everything; player death, death overlay, restart after death |
+| Environment pipeline | gameplay fingerprint equals the pre-refactor baseline; all rooms default to procedural; corridor switches to GLB and back; switching, overlay and export leave colliders and nav unchanged; no duplicate colliders; wall collision and AI path still work in GLB mode; collision reference exports as binary glTF |
 | Rendering | draw-call count within budget; no console errors during play |
 
 Also executed: `npm install`, `tsc --noEmit`, `vite build`.

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "bake:textures": "node scripts/bake-textures.mjs",
     "test:e2e": "node scripts/e2e.mjs",
+    "export:collision": "node scripts/export-collision-reference.mjs",
     "screenshot": "node scripts/screenshot.mjs"
   },
   "dependencies": {

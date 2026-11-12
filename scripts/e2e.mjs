@@ -140,6 +140,37 @@ check('player can die (health reaches 0 → mission failed)', (await get('g.stat
 check('death overlay is shown', (await page.textContent('#ov-title')) === 'SIGNAL LOST');
 await page.click('#overlay'); await step(20);
 check('restart after death works', (await get('g.state.phase')) === 'playing' && (await get('g.player.alive')) && (await get('g.enemies.aliveCount')) === 1);
+// ---------- environment pipeline (Phase 1): visual modes must never touch gameplay ----------
+// Hash of all static colliders + blocked cells + nav grid, recorded before the gameplay/visual split.
+// Update only when Level.ts or prop placement is changed on purpose.
+const EXPECTED_FINGERPRINT = '598d34f6';
+const call = (code) => page.evaluate((code) => new Function('g', 'return (async () => { ' + code + ' })()')(window.__game), code);
+const fp0 = await get('g.test.fingerprint()');
+check('gameplay geometry is identical to the pre-refactor baseline', fp0.hash === EXPECTED_FINGERPRINT && fp0.statics === 130, JSON.stringify(fp0));
+const st0 = await get('g.environment.status()');
+check('every room defaults to procedural rendering', Object.values(st0.modes).every((m) => m === 'procedural') && Object.values(st0.proceduralVisible).every(Boolean));
+const pathBefore = await get('g.enemies.nav.findPath(2, 7, 34, 7).length');
+check('corridor switches to GLB rendering', (await call("return await g.environment.setMode('corridor', 'glb')")) === true);
+const st1 = await get('g.environment.status()');
+check('GLB mode hides only the corridor\'s procedural visuals', st1.modes.corridor === 'glb' && st1.proceduralVisible.corridor === false && Object.entries(st1.proceduralVisible).filter(([k]) => k !== 'corridor').every(([, v]) => v));
+const fp1 = await get('g.test.fingerprint()');
+check('switching to GLB changes no collider and no nav cell', fp1.hash === fp0.hash && fp1.rapierColliders === fp0.rapierColliders && fp1.walkable === fp0.walkable, JSON.stringify(fp1));
+await get('g.test.view(10, 7, 0, 0)'); await page.keyboard.down('KeyW'); await step(150); await page.keyboard.up('KeyW');
+const zc2 = await get('g.player.feet.z');
+check('player still collides with corridor walls in GLB mode', zc2 > 5.5 + 0.3 && zc2 < 6.2, `z = ${zc2.toFixed(3)}, wall face at 5.5`);
+check('AI path through the corridor is unchanged in GLB mode', (await get('g.enemies.nav.findPath(2, 7, 34, 7).length')) === pathBefore);
+for (let i = 0; i < 3; i++) { await call("await g.environment.setMode('corridor', 'procedural'); await g.environment.setMode('corridor', 'glb');"); }
+await call("await g.environment.setMode('corridor', 'procedural')");
+const fp2 = await get('g.test.fingerprint()'); const st2 = await get('g.environment.status()');
+check('repeated switching creates no duplicate colliders', fp2.rapierColliders === fp0.rapierColliders && fp2.statics === fp0.statics && fp2.hash === fp0.hash);
+check('corridor switches back to procedural rendering', st2.modes.corridor === 'procedural' && st2.proceduralVisible.corridor === true);
+check('a room without a manifest entry stays procedural', (await call("return await g.environment.setMode('hall', 'glb')")) === false && (await get('g.environment.status().modes.hall')) === 'procedural');
+await get('g.environment.showColliders(true)'); await step(2);
+check('collision debug overlay can be shown without changing gameplay', (await get('g.environment.collidersShown')) && (await get('g.test.fingerprint().hash')) === fp0.hash);
+await get('g.environment.showColliders(false)');
+const ex = await call("const b = new Uint8Array(await g.environment.exportCollisionReference()); return { size: b.length, magic: String.fromCharCode(b[0], b[1], b[2], b[3]) };");
+check('collision reference exports as binary glTF', ex.magic === 'glTF' && ex.size > 10000, JSON.stringify(ex));
+check('reference export leaves gameplay untouched', (await get('g.test.fingerprint().hash')) === fp0.hash);
 const info = await get('g.test.info()');
 check('renderer stats are sane', info.calls > 20 && info.calls < 900, JSON.stringify(info));
 check('no console errors during gameplay', errors.length === 0, errors.slice(0, 3).join(' | '));

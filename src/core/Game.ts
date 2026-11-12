@@ -8,6 +8,7 @@ import { createMaterials } from '../rendering/Materials';
 import { CollisionWorld } from '../environment/CollisionWorld';
 import { Level } from '../environment/Level';
 import { EnvironmentBuilder } from '../environment/EnvironmentBuilder';
+import { RoomVisuals } from '../environment/RoomVisuals';
 import { BodyCameraController, type BodyState } from '../camera/BodyCameraController';
 import { Player } from '../player/Player';
 import { HUD } from '../ui/HUD';
@@ -24,6 +25,8 @@ export class Game {
   assets = new AssetLoader();
   input!: Input; renderer!: Renderer; post!: PostProcessing; lighting!: Lighting; col!: CollisionWorld; level!: Level;
   player!: Player; bodyCam!: BodyCameraController; loop!: GameLoop;
+  /** Per-room visual mode (procedural / imported GLB), collider overlay, collision-reference export. */
+  environment!: RoomVisuals;
   time = 0;
   readonly testMode = new URLSearchParams(location.search).has('test');
   private body: BodyState = { feet: new THREE.Vector3(), velocity: new THREE.Vector3(), grounded: true, crouch: 0, sprinting: false, aiming: 0, inputYaw: 0, inputPitch: 0, dead: 0 };
@@ -41,6 +44,8 @@ export class Game {
     this.level = new Level();
     const env = new EnvironmentBuilder(this.level, this.col, mats);
     this.renderer.scene.add(env.build());
+    this.environment = new RoomVisuals(this.renderer.scene, env.sets, this.assets, this.col, this.level);
+    await this.environment.applyUrlOverrides(new URLSearchParams(location.search));
     this.lighting = new Lighting(this.renderer.scene, env.lamps, mats, this.level);
     this.post = new PostProcessing(this.renderer);
     this.player = new Player(this.input, this.col, this.level.playerSpawn);
@@ -106,6 +111,13 @@ export class Game {
     step: (n: number, dt = 1 / 60) => { for (let i = 0; i < n; i++) this.tick(dt, i === n - 1); },
     view: (x: number, z: number, yawDeg: number, pitchDeg = 0) => { this.player.physics.teleport(x, z); this.player.controller.velocity.set(0, 0, 0); this.player.controller.yaw = THREE.MathUtils.degToRad(yawDeg); this.player.controller.pitch = THREE.MathUtils.degToRad(pitchDeg); this.col.step(1 / 60); this.bodyCam.reset(this.player.controller.yaw); },
     aimAt: (x: number, y: number, z: number) => { const c = this.renderer.camera.position; const dx = x - c.x, dy = y - c.y, dz = z - c.z; this.player.controller.yaw = Math.atan2(-dx, -dz); this.player.controller.pitch = Math.atan2(dy, Math.hypot(dx, dz)); },
+    /** Stable hash of everything gameplay depends on in the environment: static colliders, blocked cells, nav grid. */
+    fingerprint: () => {
+      let h = 2166136261; const add = (n: number) => { h ^= n; h = Math.imul(h, 16777619) >>> 0; };
+      for (const c of this.col.statics) { add(c.shape === 'box' ? 1 : 2); for (const v of [c.cx, c.cy, c.cz, c.hx, c.hy, c.hz, c.rotY]) add(Math.round(v * 10000)); }
+      for (const v of this.level.blocked) add(v); for (const v of this.level.nav) add(v);
+      return { hash: h.toString(16), statics: this.col.statics.length, rapierColliders: this.col.world.colliders.len(), walkable: this.level.nav.reduce((a, v) => a + v, 0) };
+    },
     info: () => ({ calls: this.renderer.renderer.info.render.calls, tris: this.renderer.renderer.info.render.triangles, geos: this.renderer.renderer.info.memory.geometries, tex: this.renderer.renderer.info.memory.textures }),
   };
 }

@@ -14,7 +14,7 @@ await page.goto(base + '?test=1', { waitUntil: 'load' });
 await page.waitForFunction(() => window.__game?.ready, null, { timeout: 180000 });
 await page.evaluate(() => window.__game.test.start());
 for (const s of shots) {
-  const out = await page.evaluate(({ code, frames }) => { const g = window.__game; const r = code ? new Function('g', code)(g) : undefined; g.test.step(frames ?? 20); return r; }, { code: s.eval, frames: s.frames });
+  const out = await page.evaluate(async ({ code, frames }) => { const g = window.__game; const r = code ? await new Function('g', code)(g) : undefined; g.test.step(frames ?? 20); return r; }, { code: s.eval, frames: s.frames });
   await page.waitForTimeout(150);
   if (s.name === "dbg") console.log(JSON.stringify(out)); else if (s.name) { await page.screenshot({ path: `docs/screenshots/${s.name}.png`, timeout: 180000 }); console.log('saved', s.name, out !== undefined ? JSON.stringify(out) : ''); }
 }

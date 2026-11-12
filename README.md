@@ -27,7 +27,8 @@ npm install
 npm run dev            # http://localhost:5173
 npm run build          # type-check + production build into dist/
 npm run preview        # serve dist/ on :4173
-npm run test:e2e       # 40-check gameplay test (needs `npm run preview` running and Chrome)
+npm run export:collision  # write art/reference/collision_reference.glb (needs preview running)
+npm run test:e2e       # 53-check gameplay test (needs `npm run preview` running and Chrome)
 npm run bake:textures  # regenerate the procedural PBR texture sets
 ```
 
@@ -43,6 +44,7 @@ build also works from a sub-path.
 
 - [PROJECT_GUIDE.md](PROJECT_GUIDE.md) – conventions and key decisions
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/ENVIRONMENT_PIPELINE.md](docs/ENVIRONMENT_PIPELINE.md) – room visual modes, GLB manifest, collision reference
 - [docs/CONTROLS.md](docs/CONTROLS.md)
 - [docs/ASSET_CREDITS.md](docs/ASSET_CREDITS.md)
 - [docs/TEST_PLAN.md](docs/TEST_PLAN.md) – what was tested, and what was not
