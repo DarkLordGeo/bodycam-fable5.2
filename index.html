@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>BODYCAM // Facility 7</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: 'Courier New', ui-monospace, monospace; color: #e8e8e8; user-select: none; }
+      canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+      #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 0 3px rgba(0,0,0,.9); letter-spacing: .06em; }
+      #hud .tl { position: absolute; top: 18px; left: 22px; font-size: 13px; opacity: .8; }
+      #hud .tr { position: absolute; top: 18px; right: 22px; font-size: 13px; opacity: .8; text-align: right; }
+      #hud .bl { position: absolute; bottom: 20px; left: 22px; font-size: 14px; opacity: .88; }
+      #hud .br { position: absolute; bottom: 20px; right: 22px; font-size: 14px; opacity: .88; text-align: right; }
+      #hud .rec { color: #ff3b30; animation: blink 1.4s steps(2) infinite; }
+      @keyframes blink { 50% { opacity: .15; } }
+      #health-bar { width: 120px; height: 3px; background: rgba(255,255,255,.18); margin-top: 6px; }
+      #health-fill { height: 100%; width: 100%; background: #e8e8e8; transition: width .15s; }
+      #ammo { font-size: 20px; }
+      #hint { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font-size: 13px; opacity: 0; transition: opacity .25s; }
+      #damage { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(120,0,0,0) 45%, rgba(140,0,0,.75) 100%); }
+      #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,.82); cursor: pointer; text-align: center; transition: opacity .3s; }
+      #overlay h1 { font-size: 15px; font-weight: normal; letter-spacing: .5em; margin: 0 0 14px; }
+      #overlay p { font-size: 12px; opacity: .65; margin: 4px 0; letter-spacing: .12em; }
+      #overlay.hidden { opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="damage"></div>
+    <div id="hud">
+      <div class="tl"><span class="rec">●</span> REC &nbsp;UNIT-04</div>
+      <div class="tr"><span id="clock"></span><br /><span id="hostiles"></span></div>
+      <div class="bl"><span id="health">100</span><div id="health-bar"><div id="health-fill"></div></div></div>
+      <div class="br"><span id="weapon"></span><br /><span id="ammo"></span></div>
+      <div id="hint"></div>
+    </div>
+    <div id="overlay"><h1 id="ov-title">LOADING</h1><p id="ov-sub">0%</p><p id="ov-keys"></p></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
