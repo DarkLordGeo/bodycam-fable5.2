@@ -32,7 +32,7 @@ export class PostProcessing {
   }
 
   /** Muzzle flash etc. briefly blows out, then the auto-exposure dips and recovers. */
-  addFlash(v: number): void { this.flash = Math.min(1.2, this.flash + v); }
+  addFlash(v: number): void { this.flash = Math.min(0.3, this.flash + v); }
 
   update(dt: number, sceneBrightness: number, blur: THREE.Vector2): void {
     // auto exposure: slow adaptation toward a target that keeps mid-grey roughly constant (clamped like a real sensor)

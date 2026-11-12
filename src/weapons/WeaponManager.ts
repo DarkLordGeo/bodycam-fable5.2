@@ -134,7 +134,7 @@ export class WeaponManager {
     c.pitch += r.climb * k; c.yaw += r.climb * k * (Math.random() - 0.5) * 1.4;
     this.kickZ.v += r.modelKick; this.kickRot.v += r.modelRot * (0.85 + Math.random() * 0.3);
     this.heat = Math.min(1.4, this.heat + (s.auto ? 0.16 : 0.3));
-    audio.shot(s.auto ? 'rifle' : 'pistol'); this.d.post.addFlash(0.4);
+    audio.shot(s.auto ? 'rifle' : 'pistol'); this.d.post.addFlash(0.1);
     targets.alert(this.origin, 45);
     // casing
     const ep = w.model.eject.getWorldPosition(this.v);

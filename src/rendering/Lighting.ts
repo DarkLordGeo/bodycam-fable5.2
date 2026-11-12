@@ -27,10 +27,13 @@ export class Lighting {
     sun.shadow.bias = -0.0012; sun.shadow.normalBias = 0.06;
     scene.add(sun, sun.target);
 
+    // Texture-unit budget: many GPUs (e.g. Apple/Metal) expose only 16 units per fragment shader.
+    // Surface materials use 7, the sun shadow 1 — so at most 4 fixtures may cast shadows.
+    const keep = new Set(defs.filter((d) => d.shadow).filter((d) => d.kind !== 'tube' || d.flicker || (d.x === 5 && d.z === 12.6)).slice(0, 4));
     for (const def of defs) {
       const l = new THREE.SpotLight(def.color, def.intensity * 1.5, def.range ?? 14, def.kind === 'hang' ? 1.15 : 1.3, 0.85, 1.6);
       l.position.set(def.x, def.y, def.z); l.target.position.set(def.x, 0, def.z);
-      if (def.shadow) {
+      if (keep.has(def)) {
         l.castShadow = true; l.shadow.mapSize.set(1024, 1024); l.shadow.bias = -0.003; l.shadow.normalBias = 0.02;
         l.shadow.camera.near = 0.25; l.shadow.camera.far = def.range ?? 14; l.shadow.autoUpdate = false; l.shadow.needsUpdate = true;
       }

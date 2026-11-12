@@ -92,7 +92,7 @@ export class EnemyManager implements BulletTargets {
   private enemyFire(e: Enemy, hit: boolean): void {
     const tgt = this.player.chestPos; const m = e.muzzle;
     this.audio.shot('enemy', m); this.fx.flashAt(m);
-    if (hit && this.col.lineOfSight(m, tgt)) { this.fx.tracer(m, tgt); this.player.damage(8 + this.ctx.rand() * 6, e.pos); return; }
+    if (hit && this.col.lineOfSight(m, tgt)) { this.fx.tracer(m, tgt); this.player.damage(5 + this.ctx.rand() * 4, e.pos); return; }
     // miss: send the round past the player and let it land in the level
     const off = 0.35 + this.ctx.rand() * 1.1, ang = this.ctx.rand() * Math.PI * 2;
     this.d.set(tgt.x + Math.cos(ang) * off - m.x, tgt.y + Math.sin(ang) * off * 0.6 - m.y, tgt.z + Math.sin(ang) * off - m.z).normalize();

@@ -9,7 +9,7 @@ export type AIState = 'idle' | 'patrol' | 'investigate' | 'detect' | 'engage' | 
 export interface Traits { reaction: number; accuracy: number; walk: number; run: number; burst: [number, number]; pause: [number, number]; repositionAfter: number; turn: number }
 const TRAITS: Record<EnemySpawn['trait'], Traits> = {
   aggressive: { reaction: 0.42, accuracy: 0.46, walk: 1.55, run: 4.3, burst: [4, 7], pause: [0.55, 1.0], repositionAfter: 2, turn: 7 },
-  steady: { reaction: 0.6, accuracy: 0.55, walk: 1.35, run: 3.9, burst: [3, 5], pause: [0.8, 1.4], repositionAfter: 4, turn: 5.5 },
+  steady: { reaction: 1.1, accuracy: 0.3, walk: 1.35, run: 3.9, burst: [2, 4], pause: [1.3, 2.2], repositionAfter: 4, turn: 5.5 },
   cautious: { reaction: 0.8, accuracy: 0.5, walk: 1.2, run: 4.0, burst: [2, 4], pause: [1.0, 1.8], repositionAfter: 2, turn: 5 },
 };
 const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));

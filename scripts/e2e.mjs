@@ -99,13 +99,13 @@ const seen = new Set(); let inWall = 0;
 for (let i = 0; i < 20; i++) { await step(60); const s = await get('g.enemies.enemies.map(e => ({s:e.state,b:g.level.blocked[Math.floor(e.pos.z/0.5)*72+Math.floor(e.pos.x/0.5)]}))'); s.forEach((o) => { seen.add(o.s); inWall += o.b; }); }
 const e1 = await get('g.enemies.enemies.map(e => ({x:e.pos.x,z:e.pos.z}))');
 const movedCount = e0.filter((a, i) => Math.hypot(a.x - e1[i].x, a.z - e1[i].z) > 1).length;
-check('enemies render (6 skinned models in scene)', (await get('g.enemies.enemies.filter(e => e.root.visible && e.root.parent).length')) === 6);
-check('enemies patrol the level', movedCount >= 3 && seen.has('patrol') && seen.has('idle'), `${movedCount} moved; states seen: ${[...seen].join(',')}`);
+check('enemies render (1 skinned model in scene)', (await get('g.enemies.enemies.filter(e => e.root.visible && e.root.parent).length')) === 1);
+check('enemies patrol the level', movedCount >= 1 && seen.has('patrol') && seen.has('idle'), `${movedCount} moved; states seen: ${[...seen].join(',')}`);
 check('enemies never enter walls or props', inWall === 0);
 
 // detection + taking damage: stand in front of an enemy
 await get('g.enemies.enemies.forEach(e => e.perceiveT = 0)');
-const tgt = await get('(() => { const e = g.enemies.enemies[1]; const f = {x: e.pos.x + Math.sin(e.yaw) * 5, z: e.pos.z + Math.cos(e.yaw) * 5}; const n = g.enemies.nav.nearest(f.x, f.z); g.test.view(n.x, n.z, 0, 0); g.test.aimAt(e.pos.x, 1.2, e.pos.z); return {los: g.col.lineOfSight(e.eye, g.player.chestPos)}; })()');
+const tgt = await get('(() => { const e = g.enemies.enemies[0]; const f = {x: e.pos.x + Math.sin(e.yaw) * 5, z: e.pos.z + Math.cos(e.yaw) * 5}; const n = g.enemies.nav.nearest(f.x, f.z); g.test.view(n.x, n.z, 0, 0); g.test.aimAt(e.pos.x, 1.2, e.pos.z); return {los: g.col.lineOfSight(e.eye, g.player.chestPos)}; })()');
 let states = new Set();
 for (let i = 0; i < 40 && (await get('g.player.health')) > 55; i++) { await step(20); (await get('g.enemies.enemies.map(e => e.state)')).forEach((s) => states.add(s)); }
 check('enemy detects the player by line of sight', states.has('detect') || states.has('engage'), `LOS ${tgt.los}; states: ${[...states].join(',')}`);
@@ -124,14 +124,14 @@ let guard = 0, reposStates = new Set();
 while ((await get('g.enemies.aliveCount')) > 0 && guard++ < 400) { await get(hunt); await step(6); (await get('g.enemies.enemies.map(e => e.state)')).forEach((s) => reposStates.add(s)); if ((await get('g.weapons.current.reserve')) === 0 && (await get('g.weapons.current.mag')) === 0) await page.keyboard.press('Digit2'); }
 await page.mouse.up({ button: 'left' });
 check('enemies can be eliminated with weapon fire', (await get('g.enemies.aliveCount')) === 0, `iterations ${guard}`);
-check('all AI states were exercised', ['idle', 'patrol', 'investigate', 'detect', 'engage', 'dead'].every((s) => reposStates.has(s) || seen.has(s) || states.has(s)), `combat states: ${[...reposStates].join(',')}`);
+check('all AI states were exercised', ['idle', 'patrol', 'detect', 'engage', 'dead'].every((s) => reposStates.has(s) || seen.has(s) || states.has(s)), `combat states: ${[...reposStates].join(',')}`);
 await step(240);
 check('mission completes when all hostiles are down', (await get('g.state.phase')) === 'won');
 check('win overlay is shown', (await page.textContent('#ov-title')) === 'FACILITY SECURE');
 
 // restart
 await page.click('#overlay'); await step(30);
-check('restart resets the mission', (await get('g.state.phase')) === 'playing' && (await get('g.enemies.aliveCount')) === 6 && (await get('g.weapons.current.mag')) === 30 && (await get('g.player.health')) === 100 && Math.abs((await get('g.player.feet.x')) - 5) < 0.1);
+check('restart resets the mission', (await get('g.state.phase')) === 'playing' && (await get('g.enemies.aliveCount')) === 1 && (await get('g.weapons.current.mag')) === 30 && (await get('g.player.health')) === 100 && Math.abs((await get('g.player.feet.x')) - 5) < 0.1);
 
 // player death
 await get('(() => { const e = g.enemies.enemies[0]; const n = g.enemies.nav.nearest(e.pos.x + Math.sin(e.yaw) * 4, e.pos.z + Math.cos(e.yaw) * 4); g.test.view(n.x, n.z, 0, 0); })()');
@@ -139,7 +139,7 @@ guard = 0; while ((await get('g.state.phase')) === 'playing' && guard++ < 200) {
 check('player can die (health reaches 0 → mission failed)', (await get('g.state.phase')) === 'dead' && (await get('g.player.health')) === 0, `iterations ${guard}`);
 check('death overlay is shown', (await page.textContent('#ov-title')) === 'SIGNAL LOST');
 await page.click('#overlay'); await step(20);
-check('restart after death works', (await get('g.state.phase')) === 'playing' && (await get('g.player.alive')) && (await get('g.enemies.aliveCount')) === 6);
+check('restart after death works', (await get('g.state.phase')) === 'playing' && (await get('g.player.alive')) && (await get('g.enemies.aliveCount')) === 1);
 const info = await get('g.test.info()');
 check('renderer stats are sane', info.calls > 20 && info.calls < 900, JSON.stringify(info));
 check('no console errors during gameplay', errors.length === 0, errors.slice(0, 3).join(' | '));

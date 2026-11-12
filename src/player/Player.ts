@@ -29,7 +29,7 @@ export class Player {
   update(dt: number, aiming: boolean): void {
     this.controller.update(dt, aiming, this.alive);
     this.sinceHit += dt;
-    if (this.alive && this.sinceHit > 7 && this.health < 50) this.health = Math.min(50, this.health + dt * 4); // slow recovery to half
+    if (this.alive && this.sinceHit > 4 && this.health < 100) this.health = Math.min(100, this.health + dt * 8); // full recovery out of combat
   }
 
   /** from: world position of the shooter (for directional feedback). */

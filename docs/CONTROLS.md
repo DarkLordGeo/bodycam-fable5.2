@@ -19,4 +19,4 @@ Notes
 
 - Crouch-walking makes no noise enemies can hear; walking and sprinting do.
 - Gunfire is heard across most of the facility.
-- Health recovers slowly up to 50 after seven seconds without taking a hit.
+- Health recovers slowly fully after four seconds without taking a hit.

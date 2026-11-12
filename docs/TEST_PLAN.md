@@ -14,8 +14,8 @@ Last run: **40 / 40 checks passed** against `vite preview` of the production bui
 | Movement | walk, sprint speed, deceleration, crouch height, mouse look with camera inertia |
 | Collision | stopped by the south wall and the west wall; stays grounded |
 | Weapons | rifle auto fire, impact decals, recoil, aim down sights, reload from reserve, switch to pistol, semi-auto fire, switch back |
-| Enemies | six models in the scene; patrol; never inside walls or props; line-of-sight detection; detect → engage; player takes damage |
-| Mission | every hostile killed with weapon fire; all AI states exercised; win state and overlay; restart resets everything; player death, death overlay, restart after death |
+| Enemies | enemy model in the scene; patrol; never inside walls or props; line-of-sight detection; detect → engage; player takes damage |
+| Mission | hostile killed with weapon fire; all AI states exercised; win state and overlay; restart resets everything; player death, death overlay, restart after death |
 | Rendering | draw-call count within budget; no console errors during play |
 
 Also executed: `npm install`, `tsc --noEmit`, `vite build`.
@@ -38,5 +38,5 @@ Also executed: `npm install`, `tsc --noEmit`, `vite build`.
 3. Fire both weapons, empty a magazine, reload, switch mid-reload.
 4. Let a patrol see you; confirm they turn, raise the rifle, then fire.
 5. Fire in the loading bay and confirm others come to investigate.
-6. Clear all six; confirm FACILITY SECURE and restart.
+6. Kill the hostile; confirm FACILITY SECURE and restart.
 7. Die; confirm SIGNAL LOST and restart.

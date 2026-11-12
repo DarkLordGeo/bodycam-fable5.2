@@ -63,7 +63,7 @@ export class CombatEffects {
     this.flash.position.copy(pos); this.flash.quaternion.copy(quat); this.flash.rotateZ(Math.random() * 6.28);
     const s = scale * (0.75 + Math.random() * 0.5); this.flash.scale.set(s, s, s * (0.8 + Math.random() * 0.6)); this.flash.visible = true; this.flashT = 0.045;
     const d = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
-    this.flashLight.position.copy(pos).addScaledVector(d, 0.45).setY(pos.y + 0.12); this.flashLight.intensity = 9 * scale;
+    this.flashLight.position.copy(pos).addScaledVector(d, 0.45).setY(pos.y + 0.12); this.flashLight.intensity = 4 * scale;
     for (let i = 0; i < 5; i++) this.particle(pos.x, pos.y, pos.z, d.x * (1 + Math.random() * 2) + (Math.random() - 0.5) * 0.6, d.y * 2 + 0.3 + Math.random() * 0.4, d.z * (1 + Math.random() * 2) + (Math.random() - 0.5) * 0.6, 0.5, 0.5, 0.5, 0.12, 0.05 + Math.random() * 0.05, 0.5 + Math.random() * 0.4, -0.3);
   }
 

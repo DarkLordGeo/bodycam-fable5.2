@@ -7,7 +7,7 @@ Three.js + TypeScript + Vite + Rapier. Everything runs client-side; there is no 
 
 ## Play
 
-Click to deploy, then eliminate all six hostiles in the facility.
+Click to deploy, then eliminate the hostile in the facility.
 
 | Action | Input |
 | --- | --- |

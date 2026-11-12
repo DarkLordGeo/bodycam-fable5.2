@@ -24,13 +24,9 @@ export class Level {
     { x0: 21.5, z0: 13, x1: 24, z1: 21 },
   ];
   readonly enemySpawns: EnemySpawn[] = [
-    { x: 19, z: 11.2, yaw: 0, trait: 'steady', patrol: [[19, 11.2], [23.8, 22.6], [12.4, 22.6], [12.2, 11]] },
-    { x: 24.2, z: 16.2, yaw: Math.PI / 2, trait: 'cautious', patrol: [[24.2, 16.2], [17.8, 18.6]] },
-    { x: 30, z: 7, yaw: -Math.PI / 2, trait: 'aggressive', patrol: [[33, 7], [3, 7]] },
-    { x: 21.5, z: 3.2, yaw: Math.PI, trait: 'cautious', patrol: [] },
-    { x: 29, z: 11, yaw: 0, trait: 'steady', patrol: [[29, 10.6], [29, 15.6], [31.2, 13.2]] },
-    { x: 30, z: 21.8, yaw: Math.PI / 2, trait: 'aggressive', patrol: [] },
+    { x: 19, z: 11.2, yaw: 0, trait: 'steady', patrol: [[19, 11.2], [23.8, 14.5], [29, 13], [23.8, 14.5], [19, 11.2], [18.2, 7], [8, 7], [18.2, 7]] },
   ];
+
 
   constructor() {
     const f = (x0: number, z0: number, x1: number, z1: number, v: number) => { for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) this.cells[z * GW + x] = v; };
