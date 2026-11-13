@@ -1,7 +1,7 @@
 # Development environment setup report
 
-Set up and verified on **2026-11-12** by Claude Code (Opus 5.5). Branch `chore/dev-environment-setup-v2`, based on
-`main` @ 5fda95a (Phase 1). Re-run every check with `npm run verify:env`.
+Set up 2026-11-12, re-verified **2026-11-13** by Claude Code (Opus 5.5). Branch `chore/dev-environment-setup-v2`, based on
+`main` @ 5fda95a (Phase 1). Re-run every check with `npm run verify:env` (add `-- --require-unreal` to fail when the editor is closed).
 Paths are written with `%USERPROFILE%` (your home folder) so no account-specific path is committed.
 
 ## Status at a glance
@@ -14,10 +14,11 @@ Each row distinguishes **configured**, **running** and **verified** (an actual t
 | Project context (`CLAUDE.md`, docs) | ✅ Present, matches `main` | `verify:env` docs checks. Content checked against Phase 1 code |
 | Unreal Editor ↔ MCP (read-only tools) | ✅ Verified | `npm run verify:unreal`: initialize, tools/list, list_toolsets, `get_current_level`, `find_actors`. Live probe read project, level, 145 actors, camera, PIE state |
 | Unreal MCP auto-start after editor restart | ✅ Verified | Editor relaunched **without** command-line flags; the server came back from project config |
-| Claude Code ↔ Unreal MCP registration | ✅ Configured and running | `claude mcp get unreal-mcp` → `✔ Connected` from a fresh CLI process |
-| A model-driven `unreal-mcp` call from a *new* Claude session | ⚠️ Not verified | Needs a new session opened in this folder (Manual step 1) |
-| `CLAUDE.md` discovered by a new session | ⚠️ Not verified | Same as above |
-| Blender headless Python (`bpy`) + GLB export | ✅ Verified | `npm run verify:blender`: 10/10, including Phase 1 room-rule checks. Real `.blend` exported with source hash and mtime unchanged |
+| Claude Code ↔ Unreal MCP registration | ✅ Configured, connected | `verify:env` reports configured / running / connected separately; Claude's own health check → Connected |
+| A model-driven `unreal-mcp` call from a *new* Claude session | ✅ Verified (2026-11-13) | Fresh session in this folder called `mcp__unreal-mcp__*`: 19 toolsets, level `/Temp/Untitled_1`, 145 actors |
+| `CLAUDE.md` discovered by a new session | ✅ Verified (2026-11-13) | Fresh session had the BODYCAM context loaded at start |
+| GLB import into Unreal | ⚠️ Manual only | Unreal MCP `import_file` accepts FBX/OBJ only (tested). Use the editor's Interchange glTF import |
+| Blender headless Python (`bpy`) + GLB export | ✅ Verified | `npm run verify:blender`: 13/13, including Phase 1 room rules and the collision-reference round trip. Real `.blend` exported with source hash and mtime unchanged |
 | GLB validator vs three.js | ✅ Verified | `glb-report` bounds equal three.js `Box3` on `collision_reference.glb` |
 | Game toolchain | ✅ Verified | `npm ci`, `typecheck`, `build`, `test:e2e` **53/53** (fingerprint `598d34f6`) |
 
@@ -66,6 +67,9 @@ Nothing third-party was downloaded.
   SkeletalMesh, StaticMesh, StringTable, Texture).
 - Suggested use for Phase 1 work: import `art/reference/collision_reference.glb` as a reference mesh, block out or light the
   corridor for review. Nothing exported from Unreal ships.
+- **GLB import is manual.** Drag the `.glb` into the Content Browser (Interchange glTF importer, enabled by default).
+  `StaticMeshTools.import_file` pins the FBX factory and rejects `.glb` ("FbxFactory does not support .glb files. Allowed: ['fbx', 'obj']"),
+  tested 2026-11-13. The glTF → Unreal axis/unit mapping is not yet verified (U11).
 
 **Claude Code connection** (machine-specific, not in the repo):
 `claude mcp add --transport http --scope local unreal-mcp http://127.0.0.1:8000/mcp`, run in the repo folder.
@@ -106,12 +110,14 @@ Direct headless Python is enough, so **no Blender MCP add-on was installed.** Sc
 | `inspect_scene.py` | Read-only report: version, units, collections, materials, objects with triangle counts. `-- --json` for JSON |
 | `export_glb.py` | GLB export (`export_yup`, modifiers applied, custom props → `extras`, no cameras/lights). Never saves the `.blend`. Refuses to overwrite without `--overwrite`, and refuses `public/` without `--allow-public-assets` |
 | `glb-report.mjs` | Dependency-free validator: GLB 2.0, stats, world bounds, no external URIs, textures ≤ 1K, no Draco/KTX2 (meshopt is allowed). `--room <id>` applies `RoomVisuals.validate()` rules from the real `Rooms.ts` / `RoomManifest.ts` |
-| `selftest.mjs` / `selftest_build_scene.py` | End-to-end test in a temp dir: export, axis mapping, guards, room-rule pass/fail cases. Touches no project or `.blend` |
+| `import_reference.py` | Imports `art/reference/collision_reference.glb` into collection `REF_collision_reference` (unselectable, wireframe, not rendered). Never saves |
+| `selftest.mjs` (+ `selftest_build_scene.py`, `selftest_reference_roundtrip.py`) | End-to-end test in a temp dir: export, axis mapping, guards, room-rule pass/fail, reference import placement and collection-only export. Touches no project or `.blend` |
 
 Corridor workflow (bash, from the repo root):
 
 ```bash
 BLENDER="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
+"$BLENDER" path/to/corridor.blend --python tools/blender/import_reference.py      # once, in the GUI session you model in
 "$BLENDER" -b path/to/corridor.blend --python tools/blender/inspect_scene.py -- --json
 "$BLENDER" -b path/to/corridor.blend --python tools/blender/export_glb.py -- --out /tmp/room_corridor.glb --collection Corridor
 node tools/blender/glb-report.mjs /tmp/room_corridor.glb --room corridor   # bounds, Y range, 60k budget, no COL_/REF_/UCX_
@@ -120,7 +126,7 @@ node tools/blender/glb-report.mjs /tmp/room_corridor.glb --room corridor   # bou
 ```
 
 Axis mapping, verified: Blender `(1, 2, 3)` → three.js `(1, 3, −2)`. Blender +Y = three.js −Z (player forward at yaw 0).
-The collision reference imports into Blender with default glTF settings.
+The collision reference imports into Blender with default glTF settings. Verified: `COL_wall_008` lands at Blender (2, −5.25, 2.1), 3 × 0.5 × 4.2 m.
 
 ## Claude Code configuration summary
 
@@ -134,9 +140,13 @@ The collision reference imports into Blender with default glTF settings.
 
 No credentials or tokens are stored in any committed file. A scan for token, password and API-key patterns was clean.
 
-## Verification results (2026-11-12, this branch)
+## Verification results (2026-11-13, this branch)
 
-- `npm run verify:env`: all checks pass (repo, docs, claude, unreal, blender, node).
+- `npm run verify:env -- --require-unreal`, editor running: **33 passed, 0 failed**, `configured=yes running=yes connected=yes`.
+- `npm run verify:env`, editor closed: configured checks PASS. The running and connected checks report **SKIP** (not PASS), exit 0.
+  With `--require-unreal` they report FAIL, exit 1. With a missing `.uproject` the configured check FAILs.
+- Fresh Claude Code session in this folder: `CLAUDE.md` loaded at start. `unreal-mcp` tools are present. `list_toolsets` (19),
+  `get_current_level` (`/Temp/Untitled_1`) and `find_actors` (145) all PASS.
 - `npm ci`: 35 packages, 0 vulnerabilities.
 - `npm run typecheck`, `npm run build`: pass. `build` warns about a 5.2 MB JS chunk (pre-existing).
 - `npm run preview` + `CHROME="C:\Program Files\Google\Chrome\Application\chrome.exe" npm run test:e2e`: **53/53 passed**.
@@ -145,18 +155,22 @@ No credentials or tokens are stored in any committed file. A scan for token, pas
 - The e2e run overwrites `docs/screenshots/e2e-final-frame.png`. It was restored with `git restore`.
 - The Unreal editor was restarted without flags: MCP auto-started and the smoke test passed again.
 - A real `.blend` from another project was exported to a temp dir. Its SHA-256 and mtime were unchanged, and no `.blend1` was created.
-- Headless `claude -p`: **blocked**. `claude auth status` reports `loggedIn: false` (the desktop app signs in separately).
+- Unreal MCP `StaticMeshTools.import_file` with a `.glb`: rejected (FBX/OBJ only). Nothing was created in the project.
+- Headless `claude -p`: **blocked**. `claude auth status` reports `loggedIn: false` (the desktop app signs in separately). This is not
+  needed: the fresh desktop session above covers the same check.
 
 ## Remaining manual steps
 
-1. **Open a new Claude Code session in this folder.** Local MCP servers and `CLAUDE.md` load at session start; the setup
-   session started elsewhere. Check by asking it to "call unreal-mcp list_toolsets" and "summarise CLAUDE.md". Approve the server if prompted.
+1. Start Claude Code sessions **in this folder**, with the editor already running. Local MCP servers load only at session start, and
+   only for this exact path. A session started elsewhere, or before the editor, has no `unreal-mcp` tools until `/mcp` reconnects.
 2. *(Optional, for terminal use)* run `claude` and `/login`. The terminal CLI is signed out.
 3. For `test:e2e` / `export:collision` on Windows set `CHROME` as above. After e2e, `git restore docs/screenshots/e2e-final-frame.png`
    unless you want the new frame.
-4. **Recover the environment production assessment** (U1) and record the corridor art acceptance criteria (U2) in
-   `docs/ENVIRONMENT_PHASE_1.md`. Then settle U6–U13 in `docs/ENVIRONMENT_PIPELINE.md`.
-5. Review and commit this branch. Optionally run `git pull` (fast-forward) on local `main` to match `origin/main`.
+4. **Decide the modeling blockers B1–B4** in `docs/ENVIRONMENT_PHASE_1.md` §10: art acceptance criteria, material/texture approach,
+   fixture flicker and source-file location. B1 needs the original assessment, which was not found locally or in Google Drive,
+   or a fresh decision.
+5. Import a GLB into Unreal by hand once, and record the axis/unit mapping (U11) if Unreal is used for review.
+6. Review the branch and approve a push or merge. Optionally run `git pull` (fast-forward) on local `main` to match `origin/main`.
 
 ## Troubleshooting
 

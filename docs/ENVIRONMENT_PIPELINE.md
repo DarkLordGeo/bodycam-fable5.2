@@ -134,6 +134,7 @@ U-numbers match the first draft of this list (dev-environment setup, 2026-11-12)
 | U11 | Unreal ↔ Blender exchange direction and format | UE glTF import axis/unit mapping not yet verified |
 | U12 | LODs and baked lighting (lightmaps / AO) for room GLBs | — |
 | U13 | Art direction / reference set for the corridor | — |
+| U14 | How a GLB room shows fixture flicker | `Lighting.ts` animates only the procedural `lampFlicker` material; an imported emissive will not flicker (corridor fixture at x 18.25) |
 
 Settled by Phase 1 (commit 5fda95a):
 - U3, which room: `corridor` in `src/environment/Rooms.ts`, x 0–36, z 5.25–8.75.

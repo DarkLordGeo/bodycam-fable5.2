@@ -16,7 +16,8 @@ npm run build             # typecheck + vite build -> dist/
 npm run preview           # serve dist/ on :4173 (needed by test:e2e and export:collision)
 npm run test:e2e          # 53-check gameplay + environment-pipeline test
 npm run export:collision  # regenerate art/reference/collision_reference.glb (needs preview running)
-npm run verify:env        # dev-environment health check (repo, docs, Unreal MCP, Blender)
+npm run verify:env        # dev-environment health check; Unreal reported as configured / running / connected
+                          # (closed editor = SKIP; add -- --require-unreal to make that a FAIL)
 ```
 
 On Windows, `test:e2e` and `export:collision` need `CHROME="C:\Program Files\Google\Chrome\Application\chrome.exe"`
@@ -59,7 +60,7 @@ on it unless updating that screenshot is intended.
   explicit `solid()` calls, never from GLB geometry. The e2e fingerprint (`EXPECTED_FINGERPRINT` in `scripts/e2e.mjs`)
   must stay unchanged.
 - **Phase 1 (service corridor): pipeline code is on `main`.** The corridor GLB itself is not produced yet. Status and open items
-  are in docs/ENVIRONMENT_PHASE_1.md.
+  are in docs/ENVIRONMENT_PHASE_1.md. Do not start corridor modeling until its blockers B1–B4 are decided.
 - Room GLB authoring: level coordinates, inside the room rect ±0.3 m, Y between −0.5 and 5.5 m, triangles within the
   manifest budget, and no `UCX_`/`COL_`/`REF_` helper meshes. Check with `node tools/blender/glb-report.mjs file.glb --room corridor`.
 - Use `art/reference/collision_reference.glb` as the modelling reference in Blender and Unreal. Never export it with a room.
@@ -82,9 +83,10 @@ on it unless updating that screenshot is intended.
 - **Unreal MCP** (`unreal-mcp`, Epic's experimental UE 5.8 plugin), registered at Claude Code *local* scope →
   `http://127.0.0.1:8000/mcp`. Needs the editor running: `powershell -File tools/unreal/launch-editor.ps1`.
   Tool-search mode: `list_toolsets` → `describe_toolset` → `call_tool {toolset_name, tool_name, arguments}`.
-  Smoke test: `npm run verify:unreal`.
+  Smoke test: `npm run verify:unreal`. Its `StaticMeshTools.import_file` accepts FBX/OBJ only, so GLB import into Unreal is manual.
 - **Blender 5.2 LTS** via headless Python (`bpy`). Scripts in `tools/blender/`:
   - `inspect_scene.py`: read-only scene report.
+  - `import_reference.py`: brings `collision_reference.glb` in as a locked guide collection.
   - `export_glb.py`: GLB export.
   - `glb-report.mjs`: validator; `--room <id>` applies the `RoomVisuals.validate` rules.
   - `selftest.mjs`: end-to-end check.

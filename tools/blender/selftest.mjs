@@ -54,6 +54,22 @@ try {
   run(['-b', '--factory-startup', '--python', join(here, 'selftest_build_scene.py'), '--python', join(here, 'export_glb.py'), '--', '--out', withHelper], { BC_SCENE: 'corridor', BC_HELPER: '1' });
   const bad = report(withHelper, ['--room', 'corridor']);
   step('room check: COL_ helper mesh is rejected', bad.errors.some((e) => e.includes('COL_test_001')), bad.errors.join('; ') || 'no error');
+
+  // Collision reference round trip: import into Blender (locked), model in a "Corridor" collection, export only that.
+  const refGlb = join(here, '..', '..', 'art', 'reference', 'collision_reference.glb');
+  if (!existsSync(refGlb)) step('collision reference present', false, refGlb);
+  else {
+    const corrOut = join(dir, 'corridor_from_ref_scene.glb');
+    const rt = run(['-b', '--factory-startup', '--python-expr', 'import bpy; bpy.ops.wm.read_factory_settings(use_empty=True)',
+      '--python', join(here, 'import_reference.py'), '--python', join(here, 'selftest_reference_roundtrip.py'),
+      '--python', join(here, 'export_glb.py'), '--', '--out', corrOut, '--collection', 'Corridor']);
+    const info = JSON.parse((rt.match(/BODYCAM_REF_JSON (.*)/) || [, '{}'])[1]);
+    step('reference imports into Blender, locked', info.imported > 100 && info.locked, `objects=${info.imported} locked=${info.locked}`);
+    const near = (a, b) => !!a && a.every((v, k) => Math.abs(v - b[k]) < 0.002);
+    step('reference placement: COL_wall_008 at Blender (2,-5.25,2.1), 3x0.5x4.2 m', near(info.wall008_loc, [2, -5.25, 2.1]) && near(info.wall008_dim, [3, 0.5, 4.2]), `loc=${JSON.stringify(info.wall008_loc)} dim=${JSON.stringify(info.wall008_dim)}`);
+    const corr = report(corrOut, ['--room', 'corridor']);
+    step('collection export excludes the reference and passes --room corridor', corr.errors.length === 0 && corr.meshes === 1, `meshes=${corr.meshes} bounds=${JSON.stringify(corr.bounds)} errors=${corr.errors.join('; ')}`);
+  }
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
